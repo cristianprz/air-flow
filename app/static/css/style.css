@@ -1,0 +1,121 @@
+/* AirFlow Lite — Custom Styles */
+
+/* Spinning animation for running indicators */
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+.spin {
+    display: inline-block;
+    animation: spin 1s linear infinite;
+}
+
+/* Log output styling */
+.log-output {
+    background: #0d1117;
+    color: #c9d1d9;
+    font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+    font-size: 0.85rem;
+    line-height: 1.5;
+    max-height: 600px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    border-radius: 0;
+}
+
+/* Clickable table rows */
+.cursor-pointer {
+    cursor: pointer;
+}
+
+.cursor-pointer:hover {
+    background-color: rgba(255, 255, 255, 0.05) !important;
+}
+
+/* Cards */
+.card {
+    transition: border-color 0.2s;
+}
+
+.card:hover {
+    border-color: rgba(255, 255, 255, 0.2) !important;
+}
+
+/* Stats cards */
+.card .card-body h2 {
+    font-weight: 700;
+    font-size: 2rem;
+}
+
+/* Navbar brand */
+.navbar-brand {
+    font-size: 1.25rem;
+    letter-spacing: 0.5px;
+}
+
+/* Badge styling */
+.badge {
+    font-weight: 500;
+    letter-spacing: 0.3px;
+}
+
+/* Form controls dark theme improvement */
+.form-control:focus,
+.form-select:focus {
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
+}
+
+/* Table improvements */
+.table > thead > tr > th {
+    border-bottom-width: 2px;
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    letter-spacing: 0.5px;
+    color: #8b949e;
+}
+
+/* Scrollbar styling */
+.log-output::-webkit-scrollbar {
+    width: 8px;
+}
+
+.log-output::-webkit-scrollbar-track {
+    background: #161b22;
+}
+
+.log-output::-webkit-scrollbar-thumb {
+    background: #30363d;
+    border-radius: 4px;
+}
+
+.log-output::-webkit-scrollbar-thumb:hover {
+    background: #484f58;
+}
+
+/* Alert improvements */
+.alert {
+    border: none;
+    border-radius: 8px;
+}
+
+/* Progress bar */
+.progress {
+    border-radius: 4px;
+    background-color: #21262d;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .card .card-body h2 {
+        font-size: 1.5rem;
+    }
+
+    .btn-group {
+        flex-wrap: wrap;
+        gap: 4px;
+    }
+}

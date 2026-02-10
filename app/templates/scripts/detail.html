@@ -1,0 +1,212 @@
+{% extends "base.html" %}
+{% block title %}{{ script.name }} — AirFlow Lite{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h3 class="mb-1">
+            <i class="bi bi-file-earmark-code me-2"></i>{{ script.name }}
+            {% if not script.is_active %}
+            <span class="badge bg-secondary ms-2 fs-6">Inativo</span>
+            {% endif %}
+            {% if script.is_running %}
+            <span class="badge bg-primary ms-2 fs-6" id="running-badge">
+                <i class="bi bi-arrow-repeat spin me-1"></i>Em execução
+            </span>
+            {% endif %}
+        </h3>
+        <p class="text-muted mb-0">{{ script.description or 'Sem descrição.' }}</p>
+    </div>
+    <div class="btn-group">
+        <form method="POST" action="{{ url_for('scripts.execute', script_id=script.id) }}" class="d-inline">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-success" id="exec-btn"
+                    {% if script.is_running %}disabled{% endif %}>
+                <i class="bi bi-play-fill me-1"></i>Executar Agora
+            </button>
+        </form>
+        {% if current_user.is_admin %}
+        <a href="{{ url_for('scripts.edit', script_id=script.id) }}" class="btn btn-warning">
+            <i class="bi bi-pencil me-1"></i>Editar
+        </a>
+        <form method="POST" action="{{ url_for('scripts.toggle_active', script_id=script.id) }}" class="d-inline">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-{{ 'secondary' if script.is_active else 'info' }}">
+                <i class="bi bi-{{ 'pause' if script.is_active else 'play' }}-fill me-1"></i>
+                {{ 'Desativar' if script.is_active else 'Ativar' }}
+            </button>
+        </form>
+        <form method="POST" action="{{ url_for('scripts.delete', script_id=script.id) }}" class="d-inline"
+              onsubmit="return confirm('Tem certeza que deseja excluir este script e todo seu histórico?')">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-danger" {% if script.is_running %}disabled{% endif %}>
+                <i class="bi bi-trash me-1"></i>Excluir
+            </button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Script Info -->
+<div class="row g-4 mb-4">
+    <div class="col-md-6">
+        <div class="card bg-dark border-secondary">
+            <div class="card-header"><h6 class="mb-0">Informações</h6></div>
+            <div class="card-body">
+                <table class="table table-dark table-sm mb-0">
+                    <tr>
+                        <td class="text-muted" style="width: 140px;">Caminho:</td>
+                        <td><code>{{ script.file_path }}</code></td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted">Agendamento:</td>
+                        <td><code>{{ script.cron_display }}</code></td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted">Timeout:</td>
+                        <td>{{ script.timeout_seconds }} segundos</td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted">Criado em:</td>
+                        <td>{{ script.created_at.strftime('%d/%m/%Y %H:%M') }}</td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted">Atualizado em:</td>
+                        <td>{{ script.updated_at.strftime('%d/%m/%Y %H:%M') }}</td>
+                    </tr>
+                    {% if script.created_by %}
+                    <tr>
+                        <td class="text-muted">Criado por:</td>
+                        <td>{{ script.created_by.username }}</td>
+                    </tr>
+                    {% endif %}
+                </table>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card bg-dark border-secondary">
+            <div class="card-header">
+                <h6 class="mb-0">Estatísticas</h6>
+            </div>
+            <div class="card-body">
+                {% set total = executions|length %}
+                {% set successes = executions|selectattr('status', 'equalto', 'success')|list|length %}
+                {% set failures = executions|selectattr('status', 'equalto', 'failed')|list|length %}
+                <div class="row text-center">
+                    <div class="col-4">
+                        <h3 class="text-info">{{ total }}</h3>
+                        <small class="text-muted">Total</small>
+                    </div>
+                    <div class="col-4">
+                        <h3 class="text-success">{{ successes }}</h3>
+                        <small class="text-muted">Sucesso</small>
+                    </div>
+                    <div class="col-4">
+                        <h3 class="text-danger">{{ failures }}</h3>
+                        <small class="text-muted">Falhas</small>
+                    </div>
+                </div>
+                {% if total > 0 %}
+                <div class="progress mt-3" style="height: 8px;">
+                    <div class="progress-bar bg-success" style="width: {{ (successes/total*100)|round }}%"></div>
+                    <div class="progress-bar bg-danger" style="width: {{ (failures/total*100)|round }}%"></div>
+                    <div class="progress-bar bg-secondary" style="width: {{ ((total-successes-failures)/total*100)|round }}%"></div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Execution History -->
+<div class="card bg-dark border-secondary">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0"><i class="bi bi-clock-history me-2"></i>Histórico de Execuções</h5>
+        <a href="{{ url_for('executions.index', script_id=script.id) }}" class="btn btn-sm btn-outline-secondary">
+            Ver todas
+        </a>
+    </div>
+    <div class="card-body p-0">
+        {% if executions %}
+        <div class="table-responsive">
+            <table class="table table-dark table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Status</th>
+                        <th>Início</th>
+                        <th>Duração</th>
+                        <th>Disparado por</th>
+                        <th>Exit Code</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for exec in executions %}
+                    <tr class="cursor-pointer" onclick="location.href='{{ url_for('executions.detail', execution_id=exec.id) }}'">
+                        <td>{{ exec.id }}</td>
+                        <td>
+                            <span class="badge bg-{{ exec.status_badge }}">
+                                <i class="bi {{ exec.status_icon }} me-1"></i>{{ exec.status }}
+                            </span>
+                        </td>
+                        <td>{{ exec.start_time.strftime('%d/%m/%Y %H:%M:%S') }}</td>
+                        <td>{{ exec.duration }}</td>
+                        <td><small class="text-muted">{{ exec.triggered_by }}</small></td>
+                        <td>
+                            {% if exec.exit_code is not none %}
+                            <code class="{{ 'text-success' if exec.exit_code == 0 else 'text-danger' }}">
+                                {{ exec.exit_code }}
+                            </code>
+                            {% else %}
+                            —
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center text-muted py-4">
+            <i class="bi bi-clock-history" style="font-size: 2rem;"></i>
+            <p class="mt-2 mb-0">Nenhuma execução registrada.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<div class="mt-3">
+    <a href="{{ url_for('scripts.index') }}" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left me-1"></i>Voltar para Scripts
+    </a>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Polling para atualizar o status do script a cada 3s
+    setInterval(function() {
+        fetch('{{ url_for("dashboard.api_status") }}')
+            .then(r => r.json())
+            .then(data => {
+                let script = data.scripts.find(s => s.id === {{ script.id }});
+                if (script) {
+                    let btn = document.getElementById('exec-btn');
+                    let badge = document.getElementById('running-badge');
+                    if (script.is_running) {
+                        if (btn) btn.disabled = true;
+                        if (!badge) {
+                            location.reload();
+                        }
+                    } else {
+                        if (btn) btn.disabled = false;
+                        if (badge) {
+                            location.reload();
+                        }
+                    }
+                }
+            });
+    }, 3000);
+</script>
+{% endblock %}

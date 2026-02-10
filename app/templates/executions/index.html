@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+{% block title %}Execuções — AirFlow Lite{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h3 class="mb-0"><i class="bi bi-terminal me-2"></i>Histórico de Execuções</h3>
+</div>
+
+<!-- Filtros -->
+<div class="card bg-dark border-secondary mb-4">
+    <div class="card-body py-2">
+        <form method="GET" class="row g-2 align-items-center">
+            <div class="col-auto">
+                <label class="form-label mb-0 me-2 small text-muted">Filtrar:</label>
+            </div>
+            <div class="col-md-4">
+                <select name="script_id" class="form-select form-select-sm">
+                    <option value="">Todos os scripts</option>
+                    {% for s in scripts %}
+                    <option value="{{ s.id }}" {% if current_script_id|string == s.id|string %}selected{% endif %}>
+                        {{ s.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <select name="status" class="form-select form-select-sm">
+                    <option value="">Todos os status</option>
+                    {% for st in ['running', 'success', 'failed', 'skipped', 'timeout'] %}
+                    <option value="{{ st }}" {% if current_status == st %}selected{% endif %}>{{ st }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-auto">
+                <button type="submit" class="btn btn-sm btn-outline-primary">
+                    <i class="bi bi-funnel me-1"></i>Filtrar
+                </button>
+                <a href="{{ url_for('executions.index') }}" class="btn btn-sm btn-outline-secondary">Limpar</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+{% if executions %}
+<div class="card bg-dark border-secondary">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-dark table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Script</th>
+                        <th>Status</th>
+                        <th>Início</th>
+                        <th>Duração</th>
+                        <th>Disparado por</th>
+                        <th>Exit Code</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for exec in executions %}
+                    <tr class="cursor-pointer" onclick="location.href='{{ url_for('executions.detail', execution_id=exec.id) }}'">
+                        <td>{{ exec.id }}</td>
+                        <td>
+                            <a href="{{ url_for('scripts.detail', script_id=exec.script_id) }}"
+                               class="text-decoration-none" onclick="event.stopPropagation()">
+                                {{ exec.script.name }}
+                            </a>
+                        </td>
+                        <td>
+                            <span class="badge bg-{{ exec.status_badge }}">
+                                <i class="bi {{ exec.status_icon }} me-1"></i>{{ exec.status }}
+                            </span>
+                        </td>
+                        <td>{{ exec.start_time.strftime('%d/%m/%Y %H:%M:%S') }}</td>
+                        <td>{{ exec.duration }}</td>
+                        <td><small class="text-muted">{{ exec.triggered_by }}</small></td>
+                        <td>
+                            {% if exec.exit_code is not none %}
+                            <code class="{{ 'text-success' if exec.exit_code == 0 else 'text-danger' }}">
+                                {{ exec.exit_code }}
+                            </code>
+                            {% else %}
+                            —
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Paginação -->
+{% if pagination.pages > 1 %}
+<nav class="mt-3">
+    <ul class="pagination pagination-sm justify-content-center">
+        {% if pagination.has_prev %}
+        <li class="page-item">
+            <a class="page-link" href="?page={{ pagination.prev_num }}&script_id={{ current_script_id or '' }}&status={{ current_status or '' }}">
+                <i class="bi bi-chevron-left"></i>
+            </a>
+        </li>
+        {% endif %}
+
+        {% for page_num in pagination.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
+        {% if page_num %}
+        <li class="page-item {% if page_num == pagination.page %}active{% endif %}">
+            <a class="page-link" href="?page={{ page_num }}&script_id={{ current_script_id or '' }}&status={{ current_status or '' }}">
+                {{ page_num }}
+            </a>
+        </li>
+        {% else %}
+        <li class="page-item disabled"><span class="page-link">…</span></li>
+        {% endif %}
+        {% endfor %}
+
+        {% if pagination.has_next %}
+        <li class="page-item">
+            <a class="page-link" href="?page={{ pagination.next_num }}&script_id={{ current_script_id or '' }}&status={{ current_status or '' }}">
+                <i class="bi bi-chevron-right"></i>
+            </a>
+        </li>
+        {% endif %}
+    </ul>
+</nav>
+{% endif %}
+
+{% else %}
+<div class="text-center text-muted py-5">
+    <i class="bi bi-clock-history" style="font-size: 4rem;"></i>
+    <p class="mt-3 fs-5">Nenhuma execução encontrada.</p>
+</div>
+{% endif %}
+{% endblock %}

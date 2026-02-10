@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Editar' if script else 'Novo' }} Script — AirFlow Lite{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="card bg-dark border-secondary">
+            <div class="card-header">
+                <h4 class="mb-0">
+                    <i class="bi bi-{{ 'pencil' if script else 'plus-lg' }} me-2"></i>
+                    {{ 'Editar Script' if script else 'Novo Script' }}
+                </h4>
+            </div>
+            <div class="card-body">
+                <form method="POST">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                    <div class="mb-3">
+                        <label for="name" class="form-label">Nome do Script *</label>
+                        <input type="text" class="form-control" id="name" name="name"
+                               value="{{ script.name if script else request.form.get('name', '') }}"
+                               placeholder="Ex: Relatório Diário de Vendas" required>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="file_path" class="form-label">Caminho do Arquivo .py *</label>
+                        <input type="text" class="form-control font-monospace" id="file_path" name="file_path"
+                               value="{{ script.file_path if script else request.form.get('file_path', '') }}"
+                               placeholder="Ex: C:\scripts\relatorio.py" required>
+                        <div class="form-text">
+                            <i class="bi bi-info-circle me-1"></i>
+                            Caminho absoluto do script Python no servidor. Deve estar em um diretório permitido.
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="description" class="form-label">Descrição</label>
+                        <textarea class="form-control" id="description" name="description" rows="3"
+                                  placeholder="Descreva o que este script faz...">{{ script.description if script else request.form.get('description', '') }}</textarea>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="cron_expression" class="form-label">Agendamento Cron</label>
+                            <input type="text" class="form-control font-monospace" id="cron_expression"
+                                   name="cron_expression"
+                                   value="{{ script.cron_expression if script and script.cron_expression else request.form.get('cron_expression', '') }}"
+                                   placeholder="Ex: 0 8 * * *">
+                            <div class="form-text">
+                                <i class="bi bi-info-circle me-1"></i>
+                                Formato: minuto hora dia mês dia_semana. Deixe vazio para execução apenas manual.
+                            </div>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="timeout_seconds" class="form-label">Timeout (segundos)</label>
+                            <input type="number" class="form-control" id="timeout_seconds" name="timeout_seconds"
+                                   value="{{ script.timeout_seconds if script else request.form.get('timeout_seconds', 3600) }}"
+                                   min="10" max="86400">
+                            <div class="form-text">
+                                Tempo máximo de execução. Mín: 10s, Máx: 86400s (24h).
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mb-4">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="is_active" name="is_active"
+                                   {% if script and script.is_active %}checked{% elif not script %}checked{% endif %}>
+                            <label class="form-check-label" for="is_active">Script ativo</label>
+                        </div>
+                        <div class="form-text">Scripts inativos não executam pelo agendamento cron.</div>
+                    </div>
+
+                    <!-- Cron Helper -->
+                    <div class="card bg-secondary bg-opacity-25 border-secondary mb-4">
+                        <div class="card-body py-2">
+                            <small class="fw-bold"><i class="bi bi-lightbulb me-1"></i>Exemplos de Cron:</small>
+                            <div class="row mt-1">
+                                <div class="col-md-4">
+                                    <small class="text-muted">
+                                        <code>0 8 * * *</code> — Diário às 08:00<br>
+                                        <code>*/30 * * * *</code> — A cada 30 min
+                                    </small>
+                                </div>
+                                <div class="col-md-4">
+                                    <small class="text-muted">
+                                        <code>0 0 * * 1</code> — Seg. à meia-noite<br>
+                                        <code>0 9 1 * *</code> — Dia 1 às 09:00
+                                    </small>
+                                </div>
+                                <div class="col-md-4">
+                                    <small class="text-muted">
+                                        <code>0 */2 * * *</code> — A cada 2 horas<br>
+                                        <code>0 18 * * 1-5</code> — Seg-Sex 18:00
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-between">
+                        <a href="{{ url_for('scripts.index') }}" class="btn btn-outline-secondary">
+                            <i class="bi bi-arrow-left me-1"></i>Voltar
+                        </a>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-check-lg me-1"></i>
+                            {{ 'Salvar Alterações' if script else 'Criar Script' }}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
