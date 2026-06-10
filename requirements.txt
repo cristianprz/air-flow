@@ -7,3 +7,4 @@ WTForms>=3.1.0
 APScheduler>=3.10.0
 Werkzeug>=3.0.0
 waitress>=3.0.0
+python-dotenv>=1.0.0

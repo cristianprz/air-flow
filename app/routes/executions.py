@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, jsonify, request
+from flask import Blueprint, render_template, jsonify, request, flash, redirect, url_for
 from flask_login import login_required
 from app.models import Execution, Script
 
@@ -51,6 +51,24 @@ def index():
 def detail(execution_id):
     execution = Execution.query.get_or_404(execution_id)
     return render_template('executions/detail.html', execution=execution)
+
+
+@executions_bp.route('/<int:execution_id>/stop', methods=['POST'])
+@login_required
+def stop(execution_id):
+    """Interrompe uma execução em andamento (mata o processo)."""
+    execution = Execution.query.get_or_404(execution_id)
+
+    if execution.status != 'running':
+        flash('Esta execução não está em andamento.', 'warning')
+    else:
+        from app.scheduler.engine import stop_execution
+        if stop_execution(execution_id):
+            flash('Parada solicitada. O processo será encerrado em instantes.', 'info')
+        else:
+            flash('Não foi possível localizar o processo (talvez já tenha finalizado).', 'warning')
+
+    return redirect(request.referrer or url_for('executions.detail', execution_id=execution_id))
 
 
 @executions_bp.route('/<int:execution_id>/log')

@@ -1,5 +1,6 @@
 import os
 import sys
+import time
 import subprocess
 import threading
 import logging
@@ -13,6 +14,55 @@ logger = logging.getLogger(__name__)
 
 scheduler = BackgroundScheduler(timezone=BRT)
 _app = None
+
+# Registro de processos em execução (execution_id -> Popen) para permitir parada
+# manual. Protegido por lock pois é acessado pela thread do executor e por
+# requisições web concorrentes.
+_running_processes = {}
+_cancelled_executions = set()
+_proc_lock = threading.Lock()
+
+
+def _register_process(execution_id, process):
+    with _proc_lock:
+        _running_processes[execution_id] = process
+
+
+def _unregister_process(execution_id):
+    with _proc_lock:
+        _running_processes.pop(execution_id, None)
+        _cancelled_executions.discard(execution_id)
+
+
+def stop_execution(execution_id):
+    """Termina o processo de uma execução em andamento.
+
+    Retorna True se um processo foi localizado e o kill foi disparado; False se
+    não havia processo (já finalizou ou nunca existiu nesta instância).
+    """
+    with _proc_lock:
+        process = _running_processes.get(execution_id)
+        if process is None:
+            return False
+        _cancelled_executions.add(execution_id)
+
+    logger.info(f'Parada solicitada para execução {execution_id} (PID {process.pid}).')
+    try:
+        if sys.platform == 'win32':
+            # taskkill /T encerra também os processos-filhos que o script tenha criado.
+            subprocess.run(
+                ['taskkill', '/F', '/T', '/PID', str(process.pid)],
+                capture_output=True,
+            )
+        else:
+            process.kill()
+    except Exception as e:
+        logger.error(f'Erro ao parar execução {execution_id}: {e}')
+        try:
+            process.kill()
+        except Exception:
+            pass
+    return True
 
 
 def init_scheduler(app):
@@ -204,30 +254,82 @@ def _run_script_process(script_id, execution_id):
                 env={**os.environ, 'PYTHONUNBUFFERED': '1', 'PYTHONIOENCODING': 'utf-8'}
             )
 
-            # Salvar PID
+            # Salvar PID e registrar o processo para permitir parada manual
             execution.pid = process.pid
             db.session.commit()
+            _register_process(execution_id, process)
 
-            try:
-                output, _ = process.communicate(timeout=script.timeout_seconds)
-                execution.exit_code = process.returncode
-                execution.status = 'success' if process.returncode == 0 else 'failed'
-            except subprocess.TimeoutExpired:
+            # Aplica o limite de tamanho ao log.
+            def _montar_log(texto):
+                if len(texto) > max_log_size:
+                    aviso = (f'\n\n[SISTEMA] Log truncado. Mostrando os últimos '
+                             f'{max_log_size // 1024}KB.\n')
+                    return aviso + texto[-max_log_size:]
+                return texto
+
+            # Drena o stdout em uma thread, acumulando as linhas conforme chegam.
+            # Isso permite gravar o log no banco DE FORMA INCREMENTAL para o front
+            # exibir a saída em tempo real (o endpoint /log faz polling de log_output).
+            buffer = []
+            buffer_lock = threading.Lock()
+
+            def _drenar():
+                for linha in process.stdout:
+                    with buffer_lock:
+                        buffer.append(linha)
+
+            leitor = threading.Thread(target=_drenar, daemon=True)
+            leitor.start()
+
+            timeout_s = script.timeout_seconds or None
+            deadline = (time.monotonic() + timeout_s) if timeout_s else None
+            timed_out = False
+
+            # Loop de supervisão: persiste o log a cada ~1s enquanto o processo roda.
+            while True:
+                terminou = process.poll() is not None
+                with buffer_lock:
+                    parcial = ''.join(buffer)
+                execution.log_output = _montar_log(parcial)
+                db.session.commit()
+
+                if terminou:
+                    break
+                if deadline and time.monotonic() > deadline:
+                    timed_out = True
+                    break
+                with _proc_lock:
+                    if execution_id in _cancelled_executions:
+                        break
+                time.sleep(1.0)
+
+            if timed_out:
                 process.kill()
-                output, _ = process.communicate()
-                output = (output or '') + (
-                    f'\n[SISTEMA] Execução interrompida por timeout ({script.timeout_seconds}s).'
-                )
+
+            # Aguarda a leitora drenar o que restou no pipe e o processo encerrar.
+            leitor.join(timeout=5)
+            process.wait()
+            with buffer_lock:
+                output = ''.join(buffer)
+
+            if timed_out:
+                output += f'\n[SISTEMA] Execução interrompida por timeout ({timeout_s}s).'
                 execution.status = 'timeout'
                 execution.exit_code = -9
+            else:
+                execution.exit_code = process.returncode
+                execution.status = 'success' if process.returncode == 0 else 'failed'
 
-            # Montar log final (limitado ao MAX_LOG_SIZE)
-            full_output = output or ''
-            if len(full_output) > max_log_size:
-                truncated_msg = f'\n\n[SISTEMA] Log truncado. Mostrando os últimos {max_log_size // 1024}KB.\n'
-                full_output = truncated_msg + full_output[-max_log_size:]
+            # Se a parada foi solicitada manualmente, sobrescreve o status
+            with _proc_lock:
+                was_cancelled = execution_id in _cancelled_executions
+            if was_cancelled:
+                execution.status = 'stopped'
+                if execution.exit_code is None or execution.exit_code == 0:
+                    execution.exit_code = -15
+                output += '\n[SISTEMA] Execução interrompida manualmente pelo usuário.'
 
-            execution.log_output = full_output
+            execution.log_output = _montar_log(output)
             execution.end_time = now_brt()
 
             logger.info(
@@ -244,6 +346,7 @@ def _run_script_process(script_id, execution_id):
 
         finally:
             # Liberar lock SEMPRE
+            _unregister_process(execution_id)
             script.is_running = False
             execution.pid = None
             db.session.commit()

@@ -1,6 +1,12 @@
 import os
 
+from dotenv import load_dotenv
+
 basedir = os.path.abspath(os.path.dirname(__file__))
+
+# Carrega variáveis de um arquivo .env na raiz do projeto (se existir).
+# Variáveis já definidas no ambiente têm precedência (override=False).
+load_dotenv(os.path.join(basedir, '.env'))
 
 
 class Config:

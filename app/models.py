@@ -69,7 +69,7 @@ class Execution(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     script_id = db.Column(db.Integer, db.ForeignKey('scripts.id'), nullable=False, index=True)
     status = db.Column(db.String(20), nullable=False, default='pending')
-    # status: pending, running, success, failed, skipped, timeout
+    # status: pending, running, success, failed, skipped, timeout, stopped
     triggered_by = db.Column(db.String(50), default='manual')  # 'manual', 'cron', username
     start_time = db.Column(db.DateTime, default=now_brt)
     end_time = db.Column(db.DateTime, nullable=True)
@@ -100,6 +100,7 @@ class Execution(db.Model):
             'failed': 'danger',
             'skipped': 'warning',
             'timeout': 'dark',
+            'stopped': 'danger',
         }
         return badges.get(self.status, 'secondary')
 
@@ -112,6 +113,7 @@ class Execution(db.Model):
             'failed': 'bi-x-circle-fill',
             'skipped': 'bi-skip-forward-fill',
             'timeout': 'bi-clock-fill',
+            'stopped': 'bi-stop-circle-fill',
         }
         return icons.get(self.status, 'bi-question-circle')
 

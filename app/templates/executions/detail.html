@@ -16,9 +16,20 @@
             </a>
         </p>
     </div>
-    <a href="{{ url_for('scripts.detail', script_id=execution.script_id) }}" class="btn btn-outline-secondary">
-        <i class="bi bi-arrow-left me-1"></i>Voltar ao Script
-    </a>
+    <div class="btn-group">
+        {% if execution.status == 'running' %}
+        <form method="POST" action="{{ url_for('executions.stop', execution_id=execution.id) }}" class="d-inline"
+              onsubmit="return confirm('Tem certeza que deseja parar esta execução?')">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-danger">
+                <i class="bi bi-stop-fill me-1"></i>Parar Execução
+            </button>
+        </form>
+        {% endif %}
+        <a href="{{ url_for('scripts.detail', script_id=execution.script_id) }}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left me-1"></i>Voltar ao Script
+        </a>
+    </div>
 </div>
 
 <!-- Detalhes -->
