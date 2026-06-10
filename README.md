@@ -123,13 +123,71 @@ flask create-admin
 
 O comando pedirá o username e senha interativamente.
 
-### 6. Iniciar o servidor
+### 6. Iniciar o servidor (desenvolvimento)
 
 ```bash
 python run.py
 ```
 
+> `run.py` é o servidor de **desenvolvimento** do Flask. O debugger só liga com `FLASK_DEBUG=1`.
+> Para **produção** (Windows Server), use o Waitress via `serve.py` ou os scripts em `deploy/` (veja abaixo).
+
 Acesse: **http://localhost:5000**
+
+---
+
+## 🖥️ Deploy em Windows Server (produção)
+
+Em produção a aplicação roda com **Waitress** (servidor WSGI puro-Python, estável no Windows) e inicia
+automaticamente no boot via **Agendador de Tarefas (Task Scheduler)**. Todos os scripts estão em `deploy/`.
+
+> ⚠️ Rode **apenas uma instância** do servidor apontando para o mesmo banco. O scheduler de cron roda
+> dentro do processo; múltiplos processos duplicariam as execuções agendadas. O Waitress usa *threads*
+> (um único processo), então isso é respeitado por padrão.
+
+### 1. Instalar
+
+```cmd
+deploy\setup.bat
+```
+
+O `setup.bat` cria a venv, instala as dependências, gera o `deploy\.env.bat` (com uma `SECRET_KEY`
+aleatória) a partir de `deploy\.env.bat.example` e cria o usuário administrador interativamente.
+
+### 2. Configurar variáveis
+
+Edite **`deploy\.env.bat`** — em especial:
+
+- `ALLOWED_SCRIPT_DIRS` — diretórios permitidos para scripts (whitelist de segurança).
+- `DATABASE_URL` — caminho do banco (use um local fixo, ex.: `sqlite:///C:/airflow-lite/airflow_lite.db`).
+- `HOST` / `PORT` — interface e porta do servidor.
+
+> `deploy\.env.bat` contém segredos e **não** é versionado (está no `.gitignore`).
+
+### 3. Testar
+
+```cmd
+deploy\start.bat
+```
+
+Abre o servidor em `http://HOST:PORT`. `Ctrl+C` para parar.
+
+### 4. Inicialização automática no boot
+
+Clique com o botão direito em **`deploy\install-task.bat`** → **Executar como administrador**.
+Isso registra a tarefa `AirFlowLite` para iniciar no boot, sob a conta `SYSTEM` (não exige login).
+
+Comandos úteis:
+
+```cmd
+schtasks /Run    /TN "AirFlowLite"     REM inicia agora
+schtasks /Query  /TN "AirFlowLite"     REM ver status
+schtasks /End    /TN "AirFlowLite"     REM parar
+deploy\uninstall-task.bat              REM remover (como admin)
+```
+
+> Para reinício automático em caso de falha, abra o Agendador de Tarefas, edite `AirFlowLite` →
+> aba **Configurações** → **Reiniciar a cada**.
 
 ---
 
@@ -195,12 +253,15 @@ Os scripts podem ser agendados usando **expressões cron** no formato de 5 campo
 | Expressão | Descrição |
 |-----------|-----------|
 | `0 8 * * *` | Todo dia às 08:00 |
-| `30 18 * * 1-5` | Segunda a sexta às 18:30 |
+| `30 18 * * 0-4` | Segunda a sexta às 18:30 |
 | `0 */2 * * *` | A cada 2 horas |
 | `*/15 * * * *` | A cada 15 minutos |
 | `0 9 1 * *` | Dia 1 de cada mês às 09:00 |
-| `0 0 * * 0` | Todo domingo à meia-noite |
+| `0 0 * * 6` | Todo domingo à meia-noite |
 
+> ⚠️ **Atenção ao dia da semana:** o agendador (APScheduler) usa **0 = segunda-feira … 6 = domingo**
+> (diferente do cron padrão do Unix, onde 0 = domingo). Ou seja, *Segunda a sexta* é `0-4` e *domingo* é `6`.
+>
 > O fuso horário utilizado é **America/Sao_Paulo (UTC-3)**.
 
 ---

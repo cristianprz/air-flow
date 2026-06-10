@@ -1,4 +1,5 @@
 import os
+import sys
 import subprocess
 import threading
 import logging
@@ -48,8 +49,14 @@ def init_scheduler(app):
     for script in active_scripts:
         add_cron_job(script)
 
-    scheduler.start()
-    logger.info(f'Scheduler iniciado com {len(active_scripts)} job(s) de cron.')
+    # Evita iniciar duas vezes (ex.: reloader do Flask ou re-inicialização da factory).
+    # Com Waitress (1 processo) há apenas uma instância do scheduler — não use
+    # múltiplos workers/processos, ou os jobs de cron rodariam duplicados.
+    if not scheduler.running:
+        scheduler.start()
+        logger.info(f'Scheduler iniciado com {len(active_scripts)} job(s) de cron.')
+    else:
+        logger.info('Scheduler já estava em execução; reuso da instância existente.')
 
 
 def add_cron_job(script):
@@ -181,42 +188,41 @@ def _run_script_process(script_id, execution_id):
 
             logger.info(f'Executando script: {script.name} ({script.file_path})')
 
-            # Executar o script com subprocess
+            # Executar o script com subprocess.
+            # IMPORTANTE: usamos communicate() (não wait() + read()) para drenar
+            # stdout/stderr concorrentemente. Caso contrário, um script que produza
+            # mais output que o buffer do pipe (~64KB no Windows) bloqueia no write
+            # e o processo pai trava indefinidamente.
             process = subprocess.Popen(
-                ['python', script.file_path],
+                [sys.executable, '-u', script.file_path],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
-                cwd=os.path.dirname(script.file_path),
-                env={**os.environ, 'PYTHONUNBUFFERED': '1'}
+                encoding='utf-8',
+                errors='replace',
+                cwd=os.path.dirname(script.file_path) or None,
+                env={**os.environ, 'PYTHONUNBUFFERED': '1', 'PYTHONIOENCODING': 'utf-8'}
             )
 
             # Salvar PID
             execution.pid = process.pid
             db.session.commit()
 
-            # Capturar output em tempo real (salvar no banco periodicamente)
-            output_lines = []
-            total_size = 0
-
             try:
-                process.wait(timeout=script.timeout_seconds)
-            except subprocess.TimeoutExpired:
-                process.kill()
-                process.wait()
-                output = process.stdout.read() if process.stdout else ''
-                output_lines.append(output)
-                output_lines.append(f'\n[SISTEMA] Execução interrompida por timeout ({script.timeout_seconds}s).')
-                execution.status = 'timeout'
-                execution.exit_code = -9
-            else:
-                output = process.stdout.read() if process.stdout else ''
-                output_lines.append(output)
+                output, _ = process.communicate(timeout=script.timeout_seconds)
                 execution.exit_code = process.returncode
                 execution.status = 'success' if process.returncode == 0 else 'failed'
+            except subprocess.TimeoutExpired:
+                process.kill()
+                output, _ = process.communicate()
+                output = (output or '') + (
+                    f'\n[SISTEMA] Execução interrompida por timeout ({script.timeout_seconds}s).'
+                )
+                execution.status = 'timeout'
+                execution.exit_code = -9
 
             # Montar log final (limitado ao MAX_LOG_SIZE)
-            full_output = ''.join(output_lines)
+            full_output = output or ''
             if len(full_output) > max_log_size:
                 truncated_msg = f'\n\n[SISTEMA] Log truncado. Mostrando os últimos {max_log_size // 1024}KB.\n'
                 full_output = truncated_msg + full_output[-max_log_size:]

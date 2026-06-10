@@ -9,6 +9,21 @@ from app.scheduler.engine import execute_script
 scripts_bp = Blueprint('scripts', __name__, url_prefix='/scripts')
 
 
+def _is_within_directory(file_path, directory):
+    """True se file_path estiver dentro de directory (à prova de prefixos e symlinks)."""
+    try:
+        real_file = os.path.realpath(file_path)
+        real_dir = os.path.realpath(directory)
+        # commonpath compara componentes inteiros, então 'C:\scripts_evil'
+        # não é considerado dentro de 'C:\scripts'. normcase trata
+        # maiúsc/minúsc e separadores no Windows.
+        common = os.path.commonpath([os.path.normcase(real_file), os.path.normcase(real_dir)])
+        return common == os.path.normcase(real_dir)
+    except (ValueError, OSError):
+        # ValueError: caminhos em drives diferentes (Windows). OSError: caminho inválido.
+        return False
+
+
 def validate_file_path(file_path):
     """Valida se o caminho do script é permitido e existe."""
     errors = []
@@ -28,14 +43,12 @@ def validate_file_path(file_path):
     if not os.path.isfile(file_path):
         errors.append(f'Arquivo não encontrado: {file_path}')
 
-    # Verificar se está em um diretório permitido
+    # Verificar se está em um diretório permitido (whitelist)
     allowed_dirs = current_app.config.get('ALLOWED_SCRIPT_DIRS', [])
-    is_allowed = False
-    for allowed_dir in allowed_dirs:
-        allowed_dir = os.path.normpath(allowed_dir.strip())
-        if file_path.startswith(allowed_dir):
-            is_allowed = True
-            break
+    is_allowed = any(
+        _is_within_directory(file_path, allowed_dir.strip())
+        for allowed_dir in allowed_dirs if allowed_dir.strip()
+    )
 
     if not is_allowed:
         dirs_str = ', '.join(allowed_dirs)

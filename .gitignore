@@ -5,6 +5,7 @@ __pycache__/
 *.sqlite3
 instance/
 .env
+deploy/.env.bat
 venv/
 .venv/
 env/

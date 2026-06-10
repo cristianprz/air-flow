@@ -5,10 +5,20 @@ from app.models import Execution, Script
 executions_bp = Blueprint('executions', __name__, url_prefix='/executions')
 
 
+def _safe_int(value, default=None):
+    """Converte para int, retornando default em caso de valor inválido/ausente."""
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
 @executions_bp.route('/')
 @login_required
 def index():
-    page = int(request.args.get('page', 1))
+    page = _safe_int(request.args.get('page'), 1)
+    if page < 1:
+        page = 1
     per_page = 25
 
     query = Execution.query.order_by(Execution.start_time.desc())
@@ -17,8 +27,9 @@ def index():
     script_id = request.args.get('script_id')
     status = request.args.get('status')
 
-    if script_id:
-        query = query.filter_by(script_id=int(script_id))
+    script_id_int = _safe_int(script_id)
+    if script_id_int is not None:
+        query = query.filter_by(script_id=script_id_int)
     if status:
         query = query.filter_by(status=status)
 
